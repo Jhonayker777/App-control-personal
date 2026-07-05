@@ -3,6 +3,7 @@ import { getTodayHabits, addHabit, toggleHabit, deleteHabit, getAllStreaks } fro
 import Dieta from './components/Dieta';
 import Estadisticas from './components/Estadisticas';
 import Finanzas from './components/Finanzas';
+import Entrenamientos from './components/Entrenamientos';
 
 type Habit = {
   id?: number;
@@ -19,7 +20,7 @@ type Streak = {
   lastDate: string;
 };
 
-type Tab = 'habits' | 'dieta' | 'finanzas' | 'stats';
+type Tab = 'habits' | 'dieta' | 'finanzas' | 'entrenamientos' | 'stats';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('habits');
@@ -118,6 +119,8 @@ function App() {
                   ? 'Registra tus comidas diarias'
                   : activeTab === 'finanzas'
                   ? 'Controla tus finanzas'
+                  : activeTab === 'entrenamientos'
+                  ? 'Registra tus entrenamientos'
                   : 'Visualiza tu progreso'
                 }
               </p>
@@ -140,12 +143,12 @@ function App() {
         </div>
       </div>
 
-      {/* Pestañas - NUEVO ORDEN: Hábitos → Dieta → Finanzas → Estadísticas */}
+      {/* Pestañas */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-2xl mx-auto flex">
+        <div className="max-w-2xl mx-auto flex overflow-x-auto">
           <button
             onClick={() => setActiveTab('habits')}
-            className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+            className={`flex-1 py-3 px-4 text-center font-medium transition-colors whitespace-nowrap ${
               activeTab === 'habits'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -155,7 +158,7 @@ function App() {
           </button>
           <button
             onClick={() => setActiveTab('dieta')}
-            className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+            className={`flex-1 py-3 px-4 text-center font-medium transition-colors whitespace-nowrap ${
               activeTab === 'dieta'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -165,7 +168,7 @@ function App() {
           </button>
           <button
             onClick={() => setActiveTab('finanzas')}
-            className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+            className={`flex-1 py-3 px-4 text-center font-medium transition-colors whitespace-nowrap ${
               activeTab === 'finanzas'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -174,8 +177,18 @@ function App() {
             💰 Finanzas
           </button>
           <button
+            onClick={() => setActiveTab('entrenamientos')}
+            className={`flex-1 py-3 px-4 text-center font-medium transition-colors whitespace-nowrap ${
+              activeTab === 'entrenamientos'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            🏋️ Entrenamientos
+          </button>
+          <button
             onClick={() => setActiveTab('stats')}
-            className={`flex-1 py-3 px-4 text-center font-medium transition-colors ${
+            className={`flex-1 py-3 px-4 text-center font-medium transition-colors whitespace-nowrap ${
               activeTab === 'stats'
                 ? 'text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -302,6 +315,8 @@ function App() {
           <Dieta />
         ) : activeTab === 'finanzas' ? (
           <Finanzas />
+        ) : activeTab === 'entrenamientos' ? (
+          <Entrenamientos />
         ) : (
           <Estadisticas />
         )}

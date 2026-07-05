@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { getTodayLocal } from './utils/dateHelpers';
 
 // ========== HÁBITOS ==========
 export interface Habit {
@@ -57,21 +58,65 @@ export interface Budget {
   month: string;
 }
 
+// ========== ENTRENAMIENTOS ==========
+export type ExerciseCategory = 'Pecho' | 'Espalda' | 'Piernas' | 'Hombros' | 'Brazos' | 'Cardio' | 'Core' | 'Full Body';
+
+export interface Exercise {
+  id?: number;
+  name: string;
+  category: ExerciseCategory;
+  muscleGroup: string;
+  equipment?: string;
+  notes?: string;
+}
+
+export interface Workout {
+  id?: number;
+  name: string;
+  date: string;
+  time: string;
+  duration?: number; // en minutos
+  notes?: string;
+  exercises: WorkoutExercise[];
+}
+
+export interface WorkoutExercise {
+  id?: number;
+  workoutId: number;
+  exerciseId: number;
+  exerciseName: string;
+  sets: ExerciseSet[];
+  notes?: string;
+}
+
+// 🔥 RENOMBRAR Set A ExerciseSet
+export interface ExerciseSet {
+  id?: number;
+  workoutExerciseId: number;
+  reps: number;
+  weight: number;
+  completed: boolean;
+}
+
 // ========== CREAR BASE DE DATOS ==========
 export const db = new Dexie('FocoAppDB');
 
-db.version(4).stores({
+db.version(5).stores({
   habits: '++id, name, completed, date',
   streaks: '++id, habitName, currentStreak, longestStreak, lastDate',
   meals: '++id, name, calories, mealType, date, time',
   calorieGoals: '++id, date',
   transactions: '++id, type, category, amount, date, time',
-  budgets: '++id, category, month'
+  budgets: '++id, category, month',
+  exercises: '++id, name, category, muscleGroup',
+  workouts: '++id, name, date, time',
+  workoutExercises: '++id, workoutId, exerciseId',
+  exerciseSets: '++id, workoutExerciseId, reps, weight'  // 🔥 CAMBIAR DE sets A exerciseSets
 });
 
 // ========== HÁBITOS ==========
 export const getTodayHabits = async (): Promise<Habit[]> => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayLocal(); // ✅ Usar fecha local
   try {
     return await db.table('habits')
       .where('date')
@@ -188,7 +233,7 @@ export const addMeal = async (meal: Omit<Meal, 'id'>) => {
 };
 
 export const getTodayMeals = async (): Promise<Meal[]> => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayLocal(); // Usa la función helper
   try {
     return await db.table('meals')
       .where('date')
@@ -362,15 +407,15 @@ export const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
   }
 };
 
-export const getTodayTransactions = async (): Promise<Transaction[]> => {
-  const today = new Date().toISOString().split('T')[0];
+export const getTodayTransactions = async (): Promise<Habit[]> => {
+  const today = getTodayLocal(); // ✅ Usar fecha local
   try {
-    return await db.table('transactions')
+    return await db.table('habits')
       .where('date')
       .equals(today)
       .toArray();
   } catch (error) {
-    console.error('Error al obtener transacciones:', error);
+    console.error('Error al obtener hábitos:', error);
     return [];
   }
 };
@@ -498,3 +543,286 @@ export const getBudgetByCategory = async (category: string, month: string): Prom
     return undefined;
   }
 };
+
+// ========== ENTRENAMIENTOS ==========
+// Ejercicios
+export const addExercise = async (exercise: Omit<Exercise, 'id'>) => {
+  try {
+    return await db.table('exercises').add(exercise);
+  } catch (error) {
+    console.error('Error al agregar ejercicio:', error);
+    throw error;
+  }
+};
+
+export const getExercises = async (): Promise<Exercise[]> => {
+  try {
+    return await db.table('exercises').toArray();
+  } catch (error) {
+    console.error('Error al obtener ejercicios:', error);
+    return [];
+  }
+};
+
+export const getExercisesByCategory = async (category: string): Promise<Exercise[]> => {
+  try {
+    return await db.table('exercises')
+      .where('category')
+      .equals(category)
+      .toArray();
+  } catch (error) {
+    console.error('Error al obtener ejercicios por categoría:', error);
+    return [];
+  }
+};
+
+export const deleteExercise = async (id: number) => {
+  try {
+    await db.table('exercises').delete(id);
+  } catch (error) {
+    console.error('Error al eliminar ejercicio:', error);
+    throw error;
+  }
+};
+
+// Workouts
+export const addWorkout = async (workout: Omit<Workout, 'id' | 'exercises'>) => {
+  try {
+    return await db.table('workouts').add(workout);
+  } catch (error) {
+    console.error('Error al agregar workout:', error);
+    throw error;
+  }
+};
+
+export const getWorkouts = async (): Promise<Workout[]> => {
+  try {
+    const workouts = await db.table('workouts')
+      .reverse()
+      .sortBy('date');
+    
+    // Para cada workout, obtener sus ejercicios y sets
+    const workoutsWithExercises = await Promise.all(
+      workouts.map(async (workout) => {
+        const workoutExercises = await db.table('workoutExercises')
+          .where('workoutId')
+          .equals(workout.id!)
+          .toArray();
+        
+        const exercisesWithSets = await Promise.all(
+          workoutExercises.map(async (we) => {
+            const sets = await db.table('exerciseSets')
+              .where('workoutExerciseId')
+              .equals(we.id!)
+              .toArray();
+            return {
+              ...we,
+              sets: sets || []
+            };
+          })
+        );
+        
+        return {
+          ...workout,
+          exercises: exercisesWithSets || []
+        };
+      })
+    );
+    
+    return workoutsWithExercises;
+  } catch (error) {
+    console.error('Error al obtener workouts:', error);
+    return [];
+  }
+};
+
+export const getWorkoutsByDate = async (date: string): Promise<Workout[]> => {
+  try {
+    return await db.table('workouts')
+      .where('date')
+      .equals(date)
+      .toArray();
+  } catch (error) {
+    console.error('Error al obtener workouts por fecha:', error);
+    return [];
+  }
+};
+
+export const getWorkoutById = async (id: number): Promise<Workout | undefined> => {
+  try {
+    const workout = await db.table('workouts').get(id);
+    if (!workout) return undefined;
+    
+    const workoutExercises = await db.table('workoutExercises')
+      .where('workoutId')
+      .equals(id)
+      .toArray();
+    
+    const exercisesWithSets = await Promise.all(
+      workoutExercises.map(async (we) => {
+        const sets = await db.table('exerciseSets')  // 🔥 CAMBIAR A exerciseSets
+          .where('workoutExerciseId')
+          .equals(we.id!)
+          .toArray();
+        return {
+          ...we,
+          sets
+        };
+      })
+    );
+    
+    return {
+      ...workout,
+      exercises: exercisesWithSets
+    };
+  } catch (error) {
+    console.error('Error al obtener workout:', error);
+    return undefined;
+  }
+};
+
+export const deleteWorkout = async (id: number) => {
+  try {
+    const workoutExercises = await db.table('workoutExercises')
+      .where('workoutId')
+      .equals(id)
+      .toArray();
+    
+    for (const we of workoutExercises) {
+      await db.table('exerciseSets')  // 🔥 CAMBIAR A exerciseSets
+        .where('workoutExerciseId')
+        .equals(we.id!)
+        .delete();
+    }
+    
+    await db.table('workoutExercises')
+      .where('workoutId')
+      .equals(id)
+      .delete();
+    
+    await db.table('workouts').delete(id);
+  } catch (error) {
+    console.error('Error al eliminar workout:', error);
+    throw error;
+  }
+};
+
+// Workout Exercises
+export const addWorkoutExercise = async (workoutExercise: Omit<WorkoutExercise, 'id'>) => {
+  try {
+    return await db.table('workoutExercises').add(workoutExercise);
+  } catch (error) {
+    console.error('Error al agregar ejercicio al workout:', error);
+    throw error;
+  }
+};
+
+// Sets
+export const addSet = async (set: Omit<ExerciseSet, 'id'>) => {  // 🔥 CAMBIAR
+  try {
+    return await db.table('exerciseSets').add(set);  // 🔥 CAMBIAR
+  } catch (error) {
+    console.error('Error al agregar set:', error);
+    throw error;
+  }
+};
+
+export const updateSet = async (id: number, set: Partial<ExerciseSet>) => {  // 🔥 CAMBIAR
+  try {
+    await db.table('exerciseSets').update(id, set);  // 🔥 CAMBIAR
+  } catch (error) {
+    console.error('Error al actualizar set:', error);
+    throw error;
+  }
+};
+
+export const deleteSet = async (id: number) => {
+  try {
+    await db.table('exerciseSets').delete(id);  // 🔥 CAMBIAR
+  } catch (error) {
+    console.error('Error al eliminar set:', error);
+    throw error;
+  }
+};
+
+
+// ========== ESTADÍSTICAS DE ENTRENAMIENTOS ==========
+export const getWorkoutStats = async () => {
+  try {
+    // Obtener todos los workouts
+    const workouts = await getWorkouts();
+    
+    // Si no hay workouts, devolver valores por defecto
+    if (!workouts || workouts.length === 0) {
+      return {
+        totalWorkouts: 0,
+        totalExercises: 0,
+        totalSets: 0,
+        topExercises: [],
+        weeklyWorkouts: []
+      };
+    }
+
+    const totalWorkouts = workouts.length;
+    
+    // Calcular total de ejercicios y sets
+    let totalExercises = 0;
+    let totalSets = 0;
+    const exerciseCount: { [key: string]: number } = {};
+    
+    for (const w of workouts) {
+      // Verificar que w.exercises existe y es un array
+      if (w.exercises && Array.isArray(w.exercises)) {
+        totalExercises += w.exercises.length;
+        
+        for (const e of w.exercises) {
+          if (e && e.exerciseName) {
+            exerciseCount[e.exerciseName] = (exerciseCount[e.exerciseName] || 0) + 1;
+          }
+          // Verificar que e.sets existe y es un array
+          if (e.sets && Array.isArray(e.sets)) {
+            totalSets += e.sets.length;
+          }
+        }
+      }
+    }
+    
+    // Ejercicios más usados
+    const topExercises = Object.entries(exerciseCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+    
+    // Progreso semanal (últimos 7 días)
+    const today = new Date();
+    const weekDays = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      weekDays.push(date.toISOString().split('T')[0]);
+    }
+    
+    const weeklyWorkouts = weekDays.map(date => {
+      const count = workouts.filter(w => w.date === date).length;
+      return { date, count };
+    });
+    
+    return {
+      totalWorkouts,
+      totalExercises,
+      totalSets,
+      topExercises,
+      weeklyWorkouts
+    };
+  } catch (error) {
+    console.error('Error al obtener estadísticas:', error);
+    return {
+      totalWorkouts: 0,
+      totalExercises: 0,
+      totalSets: 0,
+      topExercises: [],
+      weeklyWorkouts: []
+    };
+  }
+};
+// ========== EJERCICIOS POR DEFECTO ==========

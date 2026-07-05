@@ -18,7 +18,6 @@ import {
   getTransactionsByMonth,
   deleteTransaction,
   getMonthlySummary,
-  getCategories,
   setBudget,
   getBudgets,
 } from "../db";
@@ -42,7 +41,7 @@ const Finanzas: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("registrar");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [summary, setSummary] = useState<any>(null);
-  const [categories, setCategories] = useState<string[]>([]);
+
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,17 +90,15 @@ const Finanzas: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [monthTransactions, monthlySummary, allCategories, monthBudgets] =
+      const [monthTransactions, monthlySummary, monthBudgets] =
         await Promise.all([
           getTransactionsByMonth(selectedMonth),
           getMonthlySummary(selectedMonth),
-          getCategories(),
           getBudgets(selectedMonth),
         ]);
 
       setTransactions(monthTransactions);
       setSummary(monthlySummary);
-      setCategories(allCategories);
       setBudgets(monthBudgets);
     } catch (err) {
       setError("Error al cargar datos financieros");
