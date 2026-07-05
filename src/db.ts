@@ -1,6 +1,21 @@
 import Dexie from 'dexie';
 
-// ========== DEFINIR TIPOS ==========
+// ========== HÁBITOS ==========
+export interface Habit {
+  id?: number;
+  name: string;
+  completed: boolean;
+  date: string;
+}
+
+export interface Streak {
+  id?: number;
+  habitName: string;
+  currentStreak: number;
+  longestStreak: number;
+  lastDate: string;
+}
+
 export interface Meal {
   id?: number;
   name: string;
@@ -17,35 +32,41 @@ export interface Meal {
   notes?: string;
 }
 
-export interface Habit {
-  id?: number;
-  name: string;
-  completed: boolean;
-  date: string;
-}
-
-export interface Streak {
-  id?: number;
-  habitName: string;
-  currentStreak: number;
-  longestStreak: number;
-  lastDate: string;
-}
-
 export interface CalorieGoal {
   id?: number;
   goal: number;
   date: string;
 }
 
+// ========== FINANZAS ==========
+export interface Transaction {
+  id?: number;
+  type: 'ingreso' | 'gasto';
+  category: string;
+  amount: number;
+  description: string;
+  date: string;
+  time: string;
+  notes?: string;
+}
+
+export interface Budget {
+  id?: number;
+  category: string;
+  amount: number;
+  month: string;
+}
+
 // ========== CREAR BASE DE DATOS ==========
 export const db = new Dexie('FocoAppDB');
 
-db.version(3).stores({
+db.version(4).stores({
   habits: '++id, name, completed, date',
   streaks: '++id, habitName, currentStreak, longestStreak, lastDate',
   meals: '++id, name, calories, mealType, date, time',
-  calorieGoals: '++id, date'
+  calorieGoals: '++id, date',
+  transactions: '++id, type, category, amount, date, time',
+  budgets: '++id, category, month'
 });
 
 // ========== HÁBITOS ==========
@@ -270,6 +291,7 @@ export const setCalorieGoal = async (goal: number) => {
   }
 };
 
+// ========== ESTADÍSTICAS ==========
 export const getWeeklyCalories = async () => {
   try {
     const today = new Date();
@@ -287,11 +309,192 @@ export const getWeeklyCalories = async () => {
         .equals(date)
         .toArray();
       const total = meals.reduce((sum, m) => sum + m.calories, 0);
-      weeklyData.push({ date, calories: total, mealCount: meals.length });
+      weeklyData.push({
+        date,
+        calories: total,
+        mealCount: meals.length
+      });
     }
     return weeklyData;
   } catch (error) {
     console.error('Error al obtener calorías semanales:', error);
     return [];
+  }
+};
+
+export const getMonthlyCalories = async () => {
+  try {
+    const today = new Date();
+    const monthDays = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      monthDays.push(date.toISOString().split('T')[0]);
+    }
+    
+    const monthlyData = [];
+    for (const date of monthDays) {
+      const meals = await db.table('meals')
+        .where('date')
+        .equals(date)
+        .toArray();
+      const total = meals.reduce((sum, m) => sum + m.calories, 0);
+      monthlyData.push({
+        date,
+        calories: total,
+        mealCount: meals.length
+      });
+    }
+    return monthlyData;
+  } catch (error) {
+    console.error('Error al obtener calorías mensuales:', error);
+    return [];
+  }
+};
+
+// ========== FINANZAS ==========
+export const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
+  try {
+    await db.table('transactions').add(transaction);
+  } catch (error) {
+    console.error('Error al agregar transacción:', error);
+    throw error;
+  }
+};
+
+export const getTodayTransactions = async (): Promise<Transaction[]> => {
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    return await db.table('transactions')
+      .where('date')
+      .equals(today)
+      .toArray();
+  } catch (error) {
+    console.error('Error al obtener transacciones:', error);
+    return [];
+  }
+};
+
+export const getTransactionsByDate = async (date: string): Promise<Transaction[]> => {
+  try {
+    return await db.table('transactions')
+      .where('date')
+      .equals(date)
+      .toArray();
+  } catch (error) {
+    console.error('Error al obtener transacciones:', error);
+    return [];
+  }
+};
+
+export const getTransactionsByMonth = async (month: string): Promise<Transaction[]> => {
+  try {
+    return await db.table('transactions')
+      .filter(t => t.date.startsWith(month))
+      .toArray();
+  } catch (error) {
+    console.error('Error al obtener transacciones del mes:', error);
+    return [];
+  }
+};
+
+export const deleteTransaction = async (id: number) => {
+  try {
+    await db.table('transactions').delete(id);
+  } catch (error) {
+    console.error('Error al eliminar transacción:', error);
+    throw error;
+  }
+};
+
+export const getMonthlySummary = async (month: string) => {
+  try {
+    const transactions = await getTransactionsByMonth(month);
+    const totalIncome = transactions
+      .filter(t => t.type === 'ingreso')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const totalExpenses = transactions
+      .filter(t => t.type === 'gasto')
+      .reduce((sum, t) => sum + t.amount, 0);
+    const balance = totalIncome - totalExpenses;
+
+    const expensesByCategory: { [key: string]: number } = {};
+    transactions
+      .filter(t => t.type === 'gasto')
+      .forEach(t => {
+        expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.amount;
+      });
+
+    return {
+      totalIncome,
+      totalExpenses,
+      balance,
+      expensesByCategory,
+      transactionCount: transactions.length
+    };
+  } catch (error) {
+    console.error('Error al obtener resumen mensual:', error);
+    return {
+      totalIncome: 0,
+      totalExpenses: 0,
+      balance: 0,
+      expensesByCategory: {},
+      transactionCount: 0
+    };
+  }
+};
+
+export const getCategories = async (): Promise<string[]> => {
+  try {
+    const transactions = await db.table('transactions').toArray();
+    const categories = new Set(transactions.map(t => t.category));
+    return Array.from(categories);
+  } catch (error) {
+    console.error('Error al obtener categorías:', error);
+    return [];
+  }
+};
+
+export const setBudget = async (category: string, amount: number, month: string) => {
+  try {
+    const existing = await db.table('budgets')
+      .where('category')
+      .equals(category)
+      .and(b => b.month === month)
+      .first();
+    
+    if (existing) {
+      await db.table('budgets').update(existing.id!, { amount });
+    } else {
+      await db.table('budgets').add({ category, amount, month });
+    }
+  } catch (error) {
+    console.error('Error al establecer presupuesto:', error);
+    throw error;
+  }
+};
+
+export const getBudgets = async (month: string): Promise<Budget[]> => {
+  try {
+    return await db.table('budgets')
+      .where('month')
+      .equals(month)
+      .toArray();
+  } catch (error) {
+    console.error('Error al obtener presupuestos:', error);
+    return [];
+  }
+};
+
+export const getBudgetByCategory = async (category: string, month: string): Promise<Budget | undefined> => {
+  try {
+    return await db.table('budgets')
+      .where('category')
+      .equals(category)
+      .and(b => b.month === month)
+      .first();
+  } catch (error) {
+    console.error('Error al obtener presupuesto:', error);
+    return undefined;
   }
 };
